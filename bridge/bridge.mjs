@@ -120,7 +120,10 @@ const OBSERVE_HINT =
 let recent = []   // 最近几条点评，防止重复同一句
 // 看图专用会话：定期换新，避免历史里堆满图片把每轮输入撑爆
 const OBSERVE_SESSION_FILE = path.join(HERE, 'observe-session-id.txt')
-let observeSessionId = (fs.existsSync(OBSERVE_SESSION_FILE) && fs.readFileSync(OBSERVE_SESSION_FILE, 'utf8').trim()) || ('see-' + Date.now())
+// ⚠️ 看图会话**不跨进程复用**：持久化的 id 会让新进程收到 "session already exists"
+//    （SDK 要求先 resume，而 resume 对不存在的会话会 reject，两头都不舒服）
+//    看图是短上下文，重启即丢弃完全可接受。
+let observeSessionId = 'see-' + Date.now()
 let observeTurns = 0
 const OBSERVE_MAX_TURNS = Number(process.env.WHALE_OBSERVE_TURNS || 8)
 
@@ -143,10 +146,21 @@ async function observe(imageB64, mimeType, hint, windowTitle) {
     log('observe session rotated ->', observeSessionId)
   }
   observeTurns += 1
-  const reply = await chatBlocks([
+  const blocks = [
     { type: 'image', data: imageB64, mimeType: mimeType || 'image/jpeg' },
     { type: 'text', text },
-  ], observeSessionId)
+  ]
+  let reply
+  try {
+    reply = await chatBlocks(blocks, observeSessionId)
+  } catch (e) {
+    if (/already exists/.test(String(e.message))) {
+      observeSessionId = 'see-' + Date.now()
+      fs.writeFileSync(OBSERVE_SESSION_FILE, observeSessionId)
+      log('observe session collided, rotated ->', observeSessionId)
+      reply = await chatBlocks(blocks, observeSessionId)
+    } else throw e
+  }
   if (reply) { recent.push(reply.slice(0, 40)); if (recent.length > 8) recent = recent.slice(-8) }
   return reply
 }
