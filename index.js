@@ -159,7 +159,14 @@ export function apply(ctx) {
       const assetsDir = join(cfg.overlayDir, 'assets')
       let files = []
       try { files = icons } catch {}
-      return sendJson(res, 200, { ok: true, overlay: ov, bridge: br, detail, icons: files, config: cfg, assetsDir })
+      const electronExe = join(cfg.overlayDir, 'node_modules', 'electron', 'dist', 'electron.exe')
+      const electronReady = existsSync(electronExe)
+      return sendJson(res, 200, {
+        ok: true, overlay: ov, bridge: br, detail, icons: files, config: cfg, assetsDir,
+        electronReady,
+        installer: join(PLUGIN_DIR, 'scripts', 'install.ps1'),
+        platforms: ['web', 'desktop'],
+      })
     }
 
     if (httpReq.method === 'POST' && p === '/config') {

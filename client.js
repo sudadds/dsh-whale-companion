@@ -96,7 +96,13 @@ window.__ModuleLoader__.load({
             h('span', { style: { display: 'flex', gap: 8 } },
               h('button', { style: S.btn(!overlayOn), disabled: busy === 'start', onClick: () => act('start', () => jpost('/start')) }, '启动'),
               h('button', { style: S.btn(overlayOn), disabled: busy === 'stop', onClick: () => act('stop', () => jpost('/stop')) }, '停止'))),
-          err ? h('div', { style: { ...S.hint, color: '#e0556b', marginTop: 6 } }, err) : null),
+          err ? h('div', { style: { ...S.hint, color: '#e0556b', marginTop: 6 } }, err) : null,
+          st.electronReady === false ? h('div', {
+            style: { marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(224,85,107,.12)', fontSize: 12 },
+          },
+            h('div', {}, '还没装依赖，浮层起不来。先跑：'),
+            h('code', { style: { display: 'block', marginTop: 4, wordBreak: 'break-all', fontSize: 11.5 } },
+              'powershell -ExecutionPolicy Bypass -File "' + (st.installer || '') + '"')) : null),
 
         h('div', { style: S.card },
           h('div', { style: S.title }, '陪玩行为'),

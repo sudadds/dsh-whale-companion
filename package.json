@@ -1,6 +1,6 @@
 {
   "name": "dsh-whale-companion",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "DSH 插件：桌面悬浮球 + 漫画气泡 + 看屏幕陪玩，设置里可管理（Windows）",
   "type": "module",
   "main": "index.js",

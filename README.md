@@ -49,16 +49,43 @@ DSH（DeepSeek Harness）插件形态：**装一次，在设置里开关**，不
 
 ## 安装
 
+> 适用 **DSH Web**（`dsh web`）与 **DSH 桌面版**——两者渲染的是同一套 Web 客户端，插件装进对应 profile 即可。
+
+### 方式 A：从 GitHub 装（推荐给朋友）
+
 ```bash
-git clone <本仓库> dsh-whale-companion
-cd dsh-whale-companion
-powershell -ExecutionPolicy Bypass -File scripts/install.ps1
-dsh plugin --profile web add link:<本仓库绝对路径>
+# Web
+dsh plugin --profile web add github:<你的用户名>/dsh-whale-companion
+
+# 桌面版
+dsh plugin --profile desktop add github:<你的用户名>/dsh-whale-companion
 ```
 
-`install.ps1` 做了三件事：装 Electron、建 Python venv 并装 Pillow、从 `AGENTS.example.md` 复制一份人格文件。
+装完还要补两个运行时依赖（Electron + Pillow），执行包里自带的安装脚本：
 
-然后**重启 DSH**，进 **设置 → 鲸鱼娘**，点「启动」。
+```bash
+cd "$(dsh plugin --profile web root 2>/dev/null || echo .)"   # 找不到就手动进 profile 的 node_modules/dsh-whale-companion
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+```
+
+> 不知道装到哪去了？在 **设置 → 鲸鱼娘** 里，如果提示"还没装依赖"，那一行会直接给出**本机真实路径**，复制执行即可。
+
+### 方式 B：本地 clone（开发用）
+
+```bash
+git clone https://github.com/<你的用户名>/dsh-whale-companion
+cd dsh-whale-companion
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+
+dsh plugin --profile web     add link:<本目录绝对路径>
+dsh plugin --profile desktop add link:<本目录绝对路径>
+```
+
+### 方式 C：下载 zip（朋友没有 git 时）
+
+下载仓库 zip → 解压 → 执行 `scripts/install.ps1` → 用 `dsh plugin add link:<解压目录>`。
+
+装完**重启 DSH**，进 **设置 → 鲸鱼娘**，点「启动」。
 
 ## 用法
 
@@ -132,3 +159,34 @@ scripts/install.ps1 安装脚本
 ## 许可与致谢
 
 MIT。头像 GIF 取自 [mini-yifan/dsh-orb-cordis](https://github.com/mini-yifan/dsh-orb-cordis)（MIT），已压缩到 128px 以免仓库过大；完整素材见原仓库。
+
+## 常见问题
+
+**设置里没有「鲸鱼娘」这一页**
+说明浏览器半端没被加载。检查两处：
+1. `package.json` 的 `exports["./client"]` 指向的文件是否真的存在；
+2. `dsh.client.inject` 里的客户端包名是否**本机真实存在**（`ls <DSH>/node_modules/@deepseek-ai | grep dsh-client-`）。
+写错一个不存在的包名，整个 web 会起不来，报错形如
+`client-modules: <pkg> declares dsh.client but exports no "./client" bundle`。
+
+**点了启动，球不出来**
+看设置页有没有"还没装依赖"提示：多半是 Electron 没装（`overlay/node_modules/electron` 不存在），跑一次 `scripts/install.ps1`。
+
+**她看不见游戏画面 / 抓到黑图**
+用了**独占全屏**。改成无边框全屏（Borderless）即可——GDI 抓屏对独占全屏无解。
+
+**`8765` / `8766` 端口被占**
+可能是旧进程没退。设置页点「停止」，或结束占用进程后再「启动」。插件启动前会先探端口，已在跑就不会重复拉起。
+
+**设置页里点开关，她总冒话打断**
+已修：面板打开时暂停自动陪看，自动消息会暂存到关面板后再播。若仍出现，多半是旧版本，重启 DSH。
+
+**太费 token**
+把「反应速度」调到 **安静**（只定时、不按画面变化触发），或直接把自动陪看关掉，只用聊天。
+
+## 参与开发
+
+- 前端三件套（`overlay/renderer.js`、`style.css`、`index.html`）改动会热重载
+- 宿主/桥（`index.js`、`bridge/bridge.mjs`）需要重启 DSH
+- 调试端点见上文"开发"一节
+- 提交前请确认没有把 `config.json`、会话 id、截图带进仓库（`.gitignore` 已覆盖）
