@@ -1,4 +1,4 @@
-# 鲸鱼娘陪玩 · 一键安装
+﻿# 鲸鱼娘陪玩 · 一键安装
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Write-Host "== 安装目录：$root" -ForegroundColor Cyan
@@ -6,7 +6,15 @@ Write-Host "== 安装目录：$root" -ForegroundColor Cyan
 # 1) Electron 浮层依赖
 Write-Host "[1/3] 安装 Electron ..." -ForegroundColor Cyan
 Push-Location (Join-Path $root 'overlay')
-try { npm install --no-audit --no-fund } finally { Pop-Location }
+try {
+  npm install --no-audit --no-fund
+  # 有些环境会拦掉 npm 的 postinstall（electron 的二进制就下不来）⇒ 手动补一次
+  $exe = Join-Path (Get-Location) 'node_modules\electron\dist\electron.exe'
+  if (-not (Test-Path $exe)) {
+    Write-Host '    补装 electron 二进制 ...' -ForegroundColor DarkGray
+    node node_modules\electron\install.js
+  }
+} finally { Pop-Location }
 
 # 2) Python 抓屏依赖
 Write-Host "[2/3] 准备 Python 环境（Pillow）..." -ForegroundColor Cyan
