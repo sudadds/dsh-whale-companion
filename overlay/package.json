@@ -1,0 +1,13 @@
+{
+  "name": "whale-overlay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "鲸鱼娘桌面浮层（Electron）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox --in-process-gpu --use-angle=swiftshader"
+  },
+  "devDependencies": {
+    "electron": "44.9.3"
+  }
+}

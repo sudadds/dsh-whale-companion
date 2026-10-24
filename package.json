@@ -1,0 +1,53 @@
+{
+  "name": "dsh-whale-companion",
+  "version": "0.1.0",
+  "description": "DSH 插件：桌面悬浮球 + 漫画气泡 + 看屏幕陪玩，设置里可管理（Windows）",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "overlay",
+    "bridge",
+    "scripts"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "companion",
+    "overlay",
+    "electron",
+    "vision"
+  ],
+  "homepage": "https://github.com/<你的用户名>/dsh-whale-companion",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<你的用户名>/dsh-whale-companion.git"
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2"
+  }
+}

@@ -1,0 +1,19 @@
+# 依赖与运行时产物
+node_modules/
+.venv/
+udd/
+*.log
+*.out.log
+
+# 个人状态（绝不入库）
+config.json
+anchor.json
+session-id.txt
+observe-session-id.txt
+frame*.jpg
+page.png
+AGENTS.md
+
+# Python
+__pycache__/
+*.pyc

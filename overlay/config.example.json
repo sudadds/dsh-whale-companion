@@ -1,0 +1,17 @@
+{
+  "icon": "assets/heart.gif",
+  "typeSpeedMs": 34,
+  "bubbleHoldMs": 6000,
+  "bubbleOpacity": 0.9,
+  "port": 8765,
+  "bridgePort": 8766,
+  "watchEnabled": false,
+  "watchSpeed": "normal",
+  "watchIntervalMs": 120000,
+  "watchChangeTrigger": true,
+  "watchChangeThreshold": 0.12,
+  "watchFps": 2,
+  "minObserveGapMs": 5000,
+  "watchMaxWidth": 1024,
+  "greeting": "我先在这看着，需要我就双击我。"
+}

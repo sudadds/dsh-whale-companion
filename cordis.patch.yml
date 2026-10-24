@@ -1,0 +1,6 @@
+# dsh-whale-companion —— 插件自带的挂载声明
+- insert:
+    - id: whale-companion
+      name: dsh-whale-companion
+      config:
+        enabled: true

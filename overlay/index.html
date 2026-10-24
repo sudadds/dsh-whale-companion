@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>whale overlay</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="root">
+    <!-- 漫画对话气泡：默认隐藏，她说话时自动冒出 -->
+    <div id="bubble" class="bubble" hidden>
+      <div id="bubbleText" class="bubble-text"></div>
+    </div>
+
+    <!-- 设置面板：双击球/气泡打开 -->
+    <div id="settings" class="settings" hidden>
+      <div class="settings-title">鲸鱼娘 · 设置</div>
+      <div class="row"><span>自动陪看</span><button id="setWatch" class="pill">关</button></div>
+      <div class="row"><span>看一次</span><button id="setOnce" class="pill">立刻</button></div>
+      <div class="row"><span>反应速度</span><button id="setSpeed" class="pill">标准</button></div>
+      <div class="row"><span>近 1 小时</span><span id="usage" class="hint">0 次</span></div>
+      <div class="row"><span>透明度</span>
+        <span class="group">
+          <button id="opaDown" class="pill">−</button>
+          <span id="opaValue" class="value">0.94</span>
+          <button id="opaUp" class="pill">＋</button>
+        </span>
+      </div>
+      <div class="row"><span>头像</span><button id="setIcon" class="pill">下一个</button></div>
+      <div class="row"><span>角色卡</span><button id="setPersona" class="pill">编辑</button></div>
+    </div>
+
+    <!-- 角色卡编辑器 -->
+    <div id="persona" class="persona" hidden>
+      <div class="persona-title">角色卡 · 人设提示词</div>
+      <textarea id="personaText" spellcheck="false"></textarea>
+      <div class="persona-actions">
+        <button id="personaCancel" class="pill">取消</button>
+        <button id="personaSave" class="pill on">保存并生效</button>
+      </div>
+    </div>
+
+    <!-- 输入条：点球展开 -->
+    <div id="composer" class="composer" hidden>
+      <input id="composerInput" type="text" placeholder="跟她说点什么…" autocomplete="off" />
+      <button id="composerSend" title="发送">↑</button>
+    </div>
+
+    <!-- 悬浮球 -->
+    <div id="ball" class="ball hit" title="拖动移动 / 双击让她说一句">
+      <img id="avatar" class="avatar" alt="" draggable="false" />
+      <span id="pulse" class="pulse"></span>
+    </div>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>
