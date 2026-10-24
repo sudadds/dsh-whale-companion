@@ -230,6 +230,23 @@ export function apply(ctx) {
       }
     }
 
+    // 建/取一个工作区（走 DSH 自己的 workspaceRegistry，UI 用的同一条路）
+    if (httpReq.method === 'POST' && p === '/workspace') {
+      const body = await readBody(httpReq)
+      const dir = String(body.path || '').trim()
+      if (!dir) return sendJson(res, 400, { ok: false, error: 'path required' })
+      const registry = typeof ctx.get === 'function' ? ctx.get('workspaceRegistry') : undefined
+      if (!registry || typeof registry.create !== 'function') {
+        return sendJson(res, 503, { ok: false, error: 'workspaceRegistry 服务不可用（DSH 版本不含它）' })
+      }
+      try {
+        const ws = await registry.create(dir)
+        return sendJson(res, 200, { ok: true, workspace: { id: ws?.id ?? ws?.workspaceId, path: ws?.path ?? dir, title: ws?.title } })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: String(e?.message ?? e) })
+      }
+    }
+
     if (httpReq.method === 'POST' && p === '/say') {
       const body = await readBody(httpReq)
       const r = await req(overlayUrl('/say'), {
