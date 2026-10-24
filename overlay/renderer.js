@@ -372,6 +372,16 @@ window.overlay.onConfig((cfg) => {
   if (!greeted && cfg?.greeting) { greeted = true; setTimeout(() => say(cfg.greeting), 600) }
 })
 window.overlay.onIcon((src) => { if (src) avatar.src = src })
+
+// 头像加载失败（文件被删、路径写错）时不至于只剩一个空球
+avatar.addEventListener('error', () => {
+  avatar.style.display = 'none'
+  ball.classList.add('no-icon')
+})
+avatar.addEventListener('load', () => {
+  avatar.style.display = ''
+  ball.classList.remove('no-icon')
+})
 window.overlay.onOpacity((v) => {
   opacity = v
   bubble.style.opacity = String(v)

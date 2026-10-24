@@ -246,3 +246,10 @@ html, body {
   color: #14345f; font: inherit; font-size: 11px; padding: 2px 9px; cursor: pointer;
 }
 .persona .pill.on { background: #14345f; color: #fffdf6; }
+
+/* 头像缺失时的兜底：不至于只剩一个空球 */
+.ball.no-icon::after {
+  content: '🐋';
+  font-size: 30px;
+  line-height: 1;
+}
