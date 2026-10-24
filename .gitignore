@@ -17,3 +17,8 @@ AGENTS.md
 # Python
 __pycache__/
 *.pyc
+
+# 头像：只把两张默认图纳入仓库，其余本机自用
+overlay/assets/*
+!overlay/assets/smile.gif
+!overlay/assets/cheer.gif

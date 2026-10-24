@@ -548,8 +548,21 @@ function createWindow() {
   }
 }
 
+function ensureIconExists() {
+  const icons = listIcons()
+  if (!icons.length) return
+  const current = String(config.icon || '')
+  const exists = current && fs.existsSync(path.join(__dirname, current))
+  if (!exists) {
+    config.icon = icons[0]
+    saveConfig()
+    log('icon-fallback', { from: current, to: config.icon })
+  }
+}
+
 app.whenReady().then(() => {
   config = loadConfig()
+  ensureIconExists()
   if (!fs.existsSync(CONFIG)) saveConfig()
   createWindow()
   startHttpApi()
