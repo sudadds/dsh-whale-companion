@@ -113,9 +113,9 @@ async function chatBlocks(blocks, sid) {
 async function chat(text) { return chatBlocks([{ type: 'text', text }]) }
 
 const OBSERVE_HINT =
-  '这是玩家此刻的屏幕。做法：先判断他在玩什么——如果认得这款游戏，就用游戏名来说；' +
-  '不认得就只描述画面里确实看得到的东西，绝不编造游戏名或剧情。' +
-  '然后用一句话在旁边点评，总共不超过 30 字。不要提“截图”“画面”这类词，别复述你看到的每个细节。'
+  '这是玩家此刻的屏幕。用一句话在旁边点评，不超过 30 字，像朋友随口说一句。' +
+  '看到具体画面就说具体的；看不出名堂就轻轻搪塞一句，别编造细节。' +
+  '不要提“截图”“画面”“游戏名”这类词，也不要复述你看到的每个细节。'
 
 let recent = []   // 最近几条点评，防止重复同一句
 // 看图专用会话：定期换新，避免历史里堆满图片把每轮输入撑爆
@@ -131,7 +131,15 @@ function buildHint(windowTitle, hint) {
   const parts = []
   if (windowTitle) parts.push(`当前窗口标题：${windowTitle}`)
   if (hint) parts.push(hint)
-  if (recent.length) parts.push(`你最近说过：${recent.slice(-3).join(' / ')}（不要重复）`)
+
+  // ⚠️ 用户反馈：每句开头都报游戏名，很啰嗦。
+  //    只在"第一次"或"换了游戏"时才允许点名，其余时候直接说事。
+  if (recent.length === 0) {
+    parts.push('这是你第一次看他的屏幕：如果认得出是什么游戏，可以顺口点一次名字。')
+  } else {
+    parts.push('注意：已经聊过几轮了。除非画面明显换成了另一款游戏，否则**不要再报游戏名**，直接说这一下发生了什么。')
+    parts.push(`你最近说过：${recent.slice(-3).join(' / ')}（不要重复，也别再用同样的开场）`)
+  }
   return parts.join('\n')
 }
 
