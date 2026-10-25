@@ -170,6 +170,62 @@ async function boot() {
   log('resume', resumed.error ? 'skipped: ' + JSON.stringify(resumed.error).slice(0, 120) : 'ok')
 }
 
+// ── ALTM 长期记忆（桥自己写，不依赖那个沉默的自动钩子）─────────────
+const ALTM_ENDPOINT = process.env.ALTM_MCP_ENDPOINT || 'http://127.0.0.1:8000/mcp'
+const ALTM_KEY = process.env.ALTM_MCP_API_KEY || ''
+const ALTM_SCOPE = {
+  tenant_id: process.env.ALTM_TENANT_ID || 'local',
+  workspace_id: process.env.ALTM_WORKSPACE_ID || 'whale-companion',
+  user_id: process.env.ALTM_USER_ID || 'local',
+  agent_id: process.env.ALTM_AGENT_ID || 'whale-companion',
+}
+let altmReady = false
+let altmSeq = 0
+
+async function altmRpc(method, params) {
+  if (!ALTM_KEY) throw new Error('ALTM_MCP_API_KEY missing')
+  const res = await fetch(ALTM_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: 'Bearer ' + ALTM_KEY,
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: ++altmSeq, method, params }),
+    signal: AbortSignal.timeout(20000),
+  })
+  const text = await res.text()
+  try { return JSON.parse(text) } catch { return null }
+}
+
+async function altmInit() {
+  if (altmReady) return
+  await altmRpc('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'whale-bridge', version: '1' } })
+  await altmRpc('notifications/initialized', {})
+  altmReady = true
+}
+
+/** 把这一问一答写进她的长期记忆（失败只记日志，不影响聊天）。 */
+async function rememberTurn(sessionId, turnId, userText, assistantText) {
+  try {
+    await altmInit()
+    const prep = await altmRpc('tools/call', {
+      name: 'memory_prepare_turn',
+      arguments: { ...ALTM_SCOPE, session_id: String(sessionId), turn_id: String(turnId), content: String(userText) },
+    })
+    const payload = prep?.result?.content?.[0]?.text
+    const cycleId = payload ? JSON.parse(payload).cycle_id : undefined
+    if (!cycleId) throw new Error('no cycle_id')
+    await altmRpc('tools/call', {
+      name: 'memory_commit_turn',
+      arguments: { ...ALTM_SCOPE, cycle_id: cycleId, assistant_content: String(assistantText) },
+    })
+    log('memory+', String(userText).slice(0, 30))
+  } catch (e) {
+    log('memory-write-failed', String(e.message).slice(0, 120))
+  }
+}
+
 /** 一句一问：返回她的完整回复文本。 */
 async function chatBlocks(blocks, sid) {
   if (!ready) throw new Error('bridge not ready')
@@ -178,7 +234,10 @@ async function chatBlocks(blocks, sid) {
   const res = await call('session/prompt', { sessionId: sid || sessionId, contentBlocks: blocks })
   if (res.error) throw new Error(JSON.stringify(res.error))
   await Promise.race([done, new Promise((_, rej) => setTimeout(() => rej(new Error('turn timeout')), 150000))])
-  return buf.trim()
+  const reply = buf.trim()
+  const userText = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+  if (reply && userText) rememberTurn(sid || sessionId, Date.now(), userText, reply)
+  return reply
 }
 
 async function chat(text) { return chatBlocks([{ type: 'text', text }]) }
