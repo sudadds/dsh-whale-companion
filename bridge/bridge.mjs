@@ -1,17 +1,71 @@
 // 陪玩 agent 桥：spawn `dsh --profile sdk`，把「聊天」变成 HTTP 接口。
 // 设计：一个进程 = 一个持久会话；每次 /chat 入队一句，收集 assistant 文本后返回。
 import { spawn } from 'node:child_process'
+import * as execMod from 'node:child_process'
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import readline from 'node:readline'
 
 const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+// 会话开在哪个目录（= DSH 里哪个工作区）。留空则用本目录。
+// 人格文件会同步到该目录下的 AGENTS.md（agent 从 cwd 读人格）。
+const WORKSPACE_FILE = path.join(HERE, 'workspace-dir.txt')
+const WORKSPACE_DIR = process.env.WHALE_WORKSPACE_DIR
+  || (fs.existsSync(WORKSPACE_FILE) ? fs.readFileSync(WORKSPACE_FILE, 'utf8').trim() : '')
+const SESSION_CWD = WORKSPACE_DIR && fs.existsSync(WORKSPACE_DIR) ? WORKSPACE_DIR : HERE
+
+function syncPersona() {
+  if (SESSION_CWD === HERE) return
+  const src = path.join(HERE, 'AGENTS.md')
+  const dst = path.join(SESSION_CWD, 'AGENTS.md')
+  try {
+    if (!fs.existsSync(src)) return
+    fs.copyFileSync(src, dst)
+    log('persona synced ->', dst)
+  } catch (e) { log('persona sync failed', String(e.message)) }
+}
 // 怎么找到 dsh：
 //   1) 环境变量 WHALE_DSH_BIN（指向 @deepseek-ai/dsh/lib/bin.js，用 node 直接跑）
 //   2) 否则走 PATH 里的 `dsh`（Windows 上是 dsh.cmd，需要 shell:true）
 const DSH_BIN = process.env.WHALE_DSH_BIN || ''
-const USE_SHELL = !DSH_BIN
+
+/** 找 dsh 可执行文件：环境变量 > PATH(where dsh) > 裸 'dsh'。
+ *  起因：插件/WMI 起的进程 PATH 可能不含 npm 的 shim，裸 'dsh' 会 exit 1。 */
+function resolveDsh() {
+  if (DSH_BIN) return { kind: 'node', bin: DSH_BIN }
+  const home = process.env.USERPROFILE || process.env.HOME || ''
+  const appdata = process.env.APPDATA || path.join(home, 'AppData', 'Roaming')
+  const localappdata = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local')
+
+  // 1) PATH 里的 dsh
+  try {
+    const { execSync } = execMod
+    const out = execSync('where dsh', { encoding: 'utf8', windowsHide: true })
+    const hit = out.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).find((x) => /\.(cmd|exe|bat)$/i.test(x))
+    if (hit) return { kind: 'shell', bin: hit }
+  } catch {}
+
+  // 2) npm 全局 shim
+  const globalShim = path.join(appdata, 'npm', 'dsh.cmd')
+  if (fs.existsSync(globalShim)) return { kind: 'shell', bin: globalShim }
+
+  // 3) npx 缓存（本机 dsh 实际所在）
+  const npxRoot = path.join(localappdata, 'npm-cache', '_npx')
+  try {
+    for (const dir of fs.readdirSync(npxRoot)) {
+      const base = path.join(npxRoot, dir, 'node_modules')
+      const cmdShim = path.join(base, '.bin', 'dsh.cmd')
+      if (fs.existsSync(cmdShim)) return { kind: 'shell', bin: cmdShim }
+      const binJs = path.join(base, '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+      if (fs.existsSync(binJs)) return { kind: 'node', bin: binJs }
+    }
+  } catch {}
+
+  return { kind: 'shell', bin: 'dsh' }
+}
+
+const DSH = resolveDsh()
 const SESSION_FILE = path.join(HERE, 'session-id.txt')
 const PORT = Number(process.env.WHALE_BRIDGE_PORT || 8766)
 const MODEL = process.env.WHALE_MODEL || 'deepseek-flash'
@@ -24,7 +78,21 @@ function log(...a) {
 }
 
 let sessionId = (fs.existsSync(SESSION_FILE) && fs.readFileSync(SESSION_FILE, 'utf8').trim()) || ('whale-' + Date.now())
+// session/resume 会保留会话原本的工作目录：换了工作区就必须换会话，
+// 否则新 cwd 不生效（表现是她还以为自己在旧目录）。
+const META_FILE = path.join(HERE, 'session-meta.json')
+try {
+  const meta = fs.existsSync(META_FILE) ? JSON.parse(fs.readFileSync(META_FILE, 'utf8')) : null
+  if (meta && meta.cwd && meta.cwd !== SESSION_CWD) {
+    const prev = sessionId
+    sessionId = 'whale-' + Date.now()
+    fs.writeFileSync(SESSION_FILE + '.prev', prev)
+    log('workspace changed, new session:', prev, '->', sessionId)
+  }
+} catch (e) { log('session-meta failed', String(e.message)) }
 fs.writeFileSync(SESSION_FILE, sessionId)
+fs.writeFileSync(META_FILE, JSON.stringify({ sessionId, cwd: SESSION_CWD }))
+log('session', sessionId, '@', SESSION_CWD)
 
 let child = null
 let reloading = false
@@ -35,9 +103,10 @@ let turnDone = null          // 当前等待中的 turn 结束 resolve
 let ready = false
 
 function spawnSdk() {
-  const c = USE_SHELL
-    ? spawn('dsh', ['--profile', 'sdk'], { cwd: HERE, env: process.env, shell: true, windowsHide: true })
-    : spawn(process.execPath, [DSH_BIN, '--profile', 'sdk'], { cwd: HERE, env: process.env })
+  log('dsh:', DSH.kind, DSH.bin)
+  const c = DSH.kind === 'shell'
+    ? spawn(DSH.bin, ['--profile', 'sdk'], { cwd: HERE, env: process.env, shell: true, windowsHide: true })
+    : spawn(process.execPath, [DSH.bin, '--profile', 'sdk'], { cwd: HERE, env: process.env })
   child = c
   const rl = readline.createInterface({ input: c.stdout })
   // 只有在“不是主动重载”且仍是当前子进程时，异常退出才算致命
@@ -90,7 +159,9 @@ function call(method, params, timeoutMs = 180000) {
 async function boot() {
   log('booting sdk…', { sessionId, model: MODEL })
   if (!child) spawnSdk()
-  const init = await call('initialize', { cwd: HERE, provider: PROVIDER, model: MODEL })
+  syncPersona()
+  const init = await call('initialize', { cwd: SESSION_CWD, provider: PROVIDER, model: MODEL })
+  log('session cwd =', SESSION_CWD)
   if (init.error) throw new Error('initialize: ' + JSON.stringify(init.error))
   ready = true
   log('initialized', JSON.stringify(init.result?.serverInfo ?? {}))

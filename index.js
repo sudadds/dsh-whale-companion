@@ -13,7 +13,7 @@
  *
  * 注意：这里只用 node 标准库，不依赖 schemastery —— 设置页由本包的 client.js 自己画。
  */
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -35,6 +35,7 @@ const DEFAULTS = {
   companionDir: join(PLUGIN_DIR, 'bridge'),
   overlayPort: 8765,
   bridgePort: 8766,
+  sessionWorkspaceDir: '',   // 陪玩会话开在哪个目录（留空=插件内的 bridge 目录）
   pythonPath: '',           // 留空=用 <companionDir>/.venv 或 PATH 里的 python
 }
 
@@ -85,7 +86,7 @@ export function apply(ctx) {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
-      env: { ...process.env, WHALE_BRIDGE_PORT: String(cfg.bridgePort) },
+      env: { ...process.env, WHALE_BRIDGE_PORT: String(cfg.bridgePort), WHALE_WORKSPACE_DIR: String(cfg.sessionWorkspaceDir || '') },
     })
     bridgeProc.unref()
     log('bridge 启动 pid=', bridgeProc.pid)
@@ -109,13 +110,43 @@ export function apply(ctx) {
     log('overlay 启动 pid=', overlayProc.pid)
   }
 
-  function kill(p, name) {
-    if (!p || p.killed) return
+  function killProcess(pid, name) {
     try {
-      if (process.platform === 'win32') spawn('taskkill', ['/PID', String(p.pid), '/T', '/F'], { windowsHide: true })
-      else p.kill()
-      log(name, '已停止')
+      if (process.platform === 'win32') spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
+      else process.kill(pid)
+      log(name, '已停止 pid=' + pid)
     } catch (e) { log(name, '停止失败', e?.message) }
+  }
+
+  function kill(p, name) {
+    if (p && !p.killed && p.pid) killProcess(p.pid, name)
+  }
+
+  /** 端口占用者（跨插件实例都有效；句柄丢了也能停）。 */
+  function pidsOnPort(port) {
+    try {
+      const out = execSync(`netstat -ano | findstr ":${port}" | findstr LISTENING`, { encoding: 'utf8', windowsHide: true, timeout: 5000 })
+      const pids = new Set()
+      for (const line of out.split(/\r?\n/)) {
+        const m = line.trim().match(/(\d+)\s*$/)
+        if (m) pids.add(Number(m[1]))
+      }
+      return [...pids]
+    } catch { return [] }
+  }
+
+  function killByPort(port) {
+    for (const pid of pidsOnPort(port)) killProcess(pid, 'port:' + port)
+  }
+
+  /** 兜底：按命令行特征杀（进程还没开始监听时也能收掉）。 */
+  function killByCmdline(needle, label) {
+    if (process.platform !== 'win32') return
+    try {
+      const ps = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${needle}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`
+      spawn('powershell', ['-NoProfile', '-Command', ps], { windowsHide: true, detached: true }).unref()
+      log(label, '按命令行清理', needle)
+    } catch (e) { log(label, '命令行清理失败', e?.message) }
   }
 
   async function startAll() {
@@ -126,9 +157,25 @@ export function apply(ctx) {
     return { bridge: await bridgeAlive(), overlay: await overlayAlive() }
   }
 
-  function stopAll() {
+  async function stopAll() {
+    // 1) 先按句柄杀（正常路径）
     kill(bridgeProc, 'bridge'); bridgeProc = null
     kill(overlayProc, 'overlay'); overlayProc = null
+    // 2) 再按端口杀（句柄丢了 / 别处起的）
+    killByPort(cfg.overlayPort)
+    killByPort(cfg.bridgePort)
+    // 3) 最后按命令行兜底
+    killByCmdline('bridge.mjs', 'bridge')
+    killByCmdline(join(cfg.overlayDir, 'node_modules'), 'overlay')
+
+    // 4) 等端口真的释放，把结果如实回给设置页
+    await new Promise((r) => setTimeout(r, 1500))
+    const left = [
+      ...pidsOnPort(cfg.overlayPort).map((pid) => 'overlay:' + pid),
+      ...pidsOnPort(cfg.bridgePort).map((pid) => 'bridge:' + pid),
+    ]
+    if (left.length) log('stop incomplete:', left.join(','))
+    return { stopped: left.length === 0, remaining: left }
   }
 
   async function pushOverlayConfig(patch) {
@@ -172,7 +219,7 @@ export function apply(ctx) {
     if (httpReq.method === 'POST' && p === '/config') {
       const body = await readBody(httpReq)
       const patch = {}
-      for (const k of ['overlayDir', 'companionDir', 'overlayPort', 'bridgePort', 'autoStart', 'enabled']) {
+      for (const k of ['overlayDir', 'companionDir', 'overlayPort', 'bridgePort', 'autoStart', 'enabled', 'sessionWorkspaceDir']) {
         if (k in body) patch[k] = body[k]
       }
       cfg = { ...cfg, ...patch }
@@ -195,8 +242,8 @@ export function apply(ctx) {
     if (httpReq.method === 'POST' && p === '/stop') {
       cfg = { ...cfg, enabled: false }
       writeCfg(cfg)
-      stopAll()
-      return sendJson(res, 200, { ok: true })
+      const r = await stopAll()
+      return sendJson(res, 200, { ok: true, ...r })
     }
 
     if (httpReq.method === 'GET' && p === '/asset') {
@@ -275,6 +322,6 @@ export function apply(ctx) {
     startAll().then((r) => log('自动启动结果', JSON.stringify(r)))
   }
 
-  ctx.effect(() => () => { stopAll() }, 'whale: 收子进程')
+  ctx.effect(() => () => { stopAll().catch(() => {}) }, 'whale: 收子进程')
   log('已挂载 家=', HOME, '浮层=', cfg.overlayDir)
 }

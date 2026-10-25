@@ -22,3 +22,12 @@ __pycache__/
 overlay/assets/*
 !overlay/assets/smile.gif
 !overlay/assets/cheer.gif
+
+# 陪玩 agent 自己写的进度笔记（私人，不入库）
+bridge/MEMORY.md
+
+# 桥的运行时状态（含本机会话 id 与路径）
+bridge/session-*
+bridge/workspace-dir.txt
+bridge/frame*.jpg
+bridge/*.log
