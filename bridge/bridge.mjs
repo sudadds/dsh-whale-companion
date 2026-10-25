@@ -173,6 +173,8 @@ async function boot() {
 // ── ALTM 长期记忆（桥自己写，不依赖那个沉默的自动钩子）─────────────
 const ALTM_ENDPOINT = process.env.ALTM_MCP_ENDPOINT || 'http://127.0.0.1:8000/mcp'
 const ALTM_KEY = process.env.ALTM_MCP_API_KEY || ''
+// ⚠️ 测试隔离：任何验证脚本/探针都必须用 ALTM_WORKSPACE_ID=whale-test，
+//    绝不能写进 whale-companion（真实记忆）。参见 scripts/mem-probe.mjs。
 const ALTM_SCOPE = {
   tenant_id: process.env.ALTM_TENANT_ID || 'local',
   workspace_id: process.env.ALTM_WORKSPACE_ID || 'whale-companion',
@@ -205,8 +207,17 @@ async function altmInit() {
   altmReady = true
 }
 
-/** 把这一问一答写进她的长期记忆（失败只记日志，不影响聊天）。 */
+/**
+ * 长期记忆写入策略（实测结论，别再改回去）：
+ *   - sdk profile 里的 ALTM consumer **只成功写入了用户那句话**（prepare 阶段），
+ *     它的 commit（写助手回复）一直静默失败；所以净效果正好是"只记主人说的"。
+ *   - 桥因此**默认不再写**，否则会和 consumer 重复（真出现过同一句两条）。
+ *   - 只有设了 ALTM_BRIDGE_WRITE=1 才由桥兜底写（consumer 彻底失效时用）。
+ *   - 任何测试/探针必须用 ALTM_WORKSPACE_ID=whale-test，禁止写 whale-companion。
+ */
 async function rememberTurn(sessionId, turnId, userText, assistantText) {
+  if (process.env.ALTM_BRIDGE_WRITE !== '1') return
+  if (!userText) return
   try {
     await altmInit()
     const prep = await altmRpc('tools/call', {
@@ -217,10 +228,10 @@ async function rememberTurn(sessionId, turnId, userText, assistantText) {
     const cycleId = payload ? JSON.parse(payload).cycle_id : undefined
     if (!cycleId) throw new Error('no cycle_id')
     await altmRpc('tools/call', {
-      name: 'memory_commit_turn',
-      arguments: { ...ALTM_SCOPE, cycle_id: cycleId, assistant_content: String(assistantText) },
+      name: 'memory_abort_turn',
+      arguments: { ...ALTM_SCOPE, cycle_id: cycleId, reason: 'user-message-only' },
     })
-    log('memory+', String(userText).slice(0, 30))
+    log('memory+ user', String(userText).slice(0, 24))
   } catch (e) {
     log('memory-write-failed', String(e.message).slice(0, 120))
   }

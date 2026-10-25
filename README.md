@@ -184,6 +184,57 @@ MIT。头像 GIF 取自 [mini-yifan/dsh-orb-cordis](https://github.com/mini-yifa
 **太费 token**
 把「反应速度」调到 **安静**（只定时、不按画面变化触发），或直接把自动陪看关掉，只用聊天。
 
+
+## 陪玩的长期记忆（可选）
+
+悬浮球背后的 agent 可以接入 ALTM 做长期记忆，**独立一个池**，不和其它会话混：
+
+| 项 | 值 |
+|---|---|
+| 作用域 | `tenant=local / workspace=whale-companion / agent=whale-companion` |
+| 写什么 | **只写玩家自己说的话**（在玩什么、喜欢什么、要求什么） |
+| 不写什么 | 她的回复。她一句玩笑不该被当成事实反复召回 |
+| 保留 | 永久，无 TTL；只做「重复内容合并」，不按时间删 |
+| 隔离 | 与其它池（例如 QQ 聊天的 `default`）互不可见 |
+
+### 怎么接
+
+在 `dsh --profile sdk` 的 profile patch 里挂 provider + consumer（无 UI），并把 `workspaceId` 固定成 `whale-companion`：
+
+```yaml
+- insert:
+    - id: altm-memory-client
+      name: '@altm/deepseek-harness'
+    - id: altm-memory
+      name: 'cordis:group'
+      group: true
+      config:
+        - id: provider
+          name: '@altm/deepseek-harness/provider'
+          config: { endpoint: http://127.0.0.1:8000/mcp, apiKeyEnv: ALTM_MCP_API_KEY }
+        - id: consumer
+          name: '@altm/deepseek-harness/consumer'
+          config:
+            tenantId: local
+            workspaceId: whale-companion
+            userId: local
+            agentId: whale-companion
+```
+
+`bridge.mjs` 默认**不再写入**（避免和 consumer 重复）；只有设 `ALTM_BRIDGE_WRITE=1` 时才由桥兜底写。
+
+### 测试隔离（重要）
+
+任何探针/测试**必须**用 `ALTM_WORKSPACE_ID=whale-test`，禁止写 `whale-companion`：
+
+```bash
+# 探针自带 whale-test 作用域
+node scripts/mem-probe.mjs write "测试一句话"
+node scripts/mem-probe.mjs list
+```
+
+> 踩过的坑：为了验证链路，我往真实记忆里写过「我在玩黑神话悟空」这种假台词，她会当成事实反复引用。测试数据只进 `whale-test`，验证完直接删池。
+
 ## 参与开发
 
 - 前端三件套（`overlay/renderer.js`、`style.css`、`index.html`）改动会热重载
